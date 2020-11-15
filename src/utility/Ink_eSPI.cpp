@@ -60,7 +60,7 @@ void Ink_eSPI::begin()
 
 void Ink_eSPI::startWrite(void)
 {
-    if (!_transaction_count++)
+    if (++_transaction_count == 1)
     {
         ink_spi.beginTransaction(SPISettings(INK_SPI_FREQUENCY, MSBFIRST, SPI_MODE3));
         CS_WRITE_L;
@@ -80,18 +80,14 @@ void Ink_eSPI::endWrite(void)
 int Ink_eSPI::writeCMD(uint8_t cmd)
 {
     waitbusy(1000);
-    startWrite();
     DC_WRITE_L;
     INK_WRITE_8(cmd);
-    endWrite();
     return 0;
 }
 int Ink_eSPI::writeData(uint8_t data)
 {
-    startWrite();
     DC_WRITE_H;
     INK_WRITE_8(data);
-    endWrite();
     return 0;
 }
 int Ink_eSPI::writeData(uint8_t data, uint16_t len )
@@ -110,13 +106,13 @@ int Ink_eSPI::writeDataArray( const uint8_t* data , uint16_t len )
         do {
             INK_WRITE_8(*data++);
         } while (--len & 3);
-        if (!len) { return 0; }
     }
-    do {
-        INK_WRITE_32(*(uint32_t*)data);
-        data += 4;
-    } while (len -= 4);
-
+    if (len) {
+        do {
+            INK_WRITE_32(*(uint32_t*)data);
+            data += 4;
+        } while (len -= 4);
+    }
     return 0;
 }
 
@@ -260,40 +256,27 @@ void Ink_eSPI::switchMode(int mode)
         {
             begin();
         }
+        startWrite();
         writeCMD(0x00); //panel setting
         writeData(0xff);
         writeData(0x0e);
 
-        int count = 0;
         writeCMD(0x20);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_vcomDC1[count]));
-        }
+        writeDataArray(lut_vcomDC1, 42);
 
         writeCMD(0x21);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_ww1[count]));
-        }
+        writeDataArray(lut_ww1, 42);
 
         writeCMD(0x22);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_bw1[count]));
-        }
+        writeDataArray(lut_bw1, 42);
 
         writeCMD(0x23);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_wb1[count]));
-        }
+        writeDataArray(lut_wb1, 42);
 
         writeCMD(0x24);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_bb1[count]));
-        }
+        writeDataArray(lut_bb1, 42);
+        endWrite();
+
         _mode = INK_PARTIAL_MODE;
         Serial.printf("Switch Mode to INK_PARTIAL_MODE \r\n");
     }
