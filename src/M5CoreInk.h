@@ -25,9 +25,9 @@ public:
     void update();
 
     void shutdown();
-    int shutdown( int seconds );
-    int shutdown( const RTC_TimeTypeDef &RTC_TimeStruct);
-    int shutdown( const RTC_DateTypeDef &RTC_DateStruct, const RTC_TimeTypeDef &RTC_TimeStruct);
+    void shutdown( int seconds );
+    void shutdown( const RTC_TimeTypeDef &RTC_TimeStruct);
+    void shutdown( const RTC_DateTypeDef &RTC_DateStruct, const RTC_TimeTypeDef &RTC_TimeStruct);
 
     #define DEBOUNCE_MS 10
     Button BtnUP    = Button( BUTTON_UP_PIN, true, DEBOUNCE_MS);

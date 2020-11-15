@@ -59,19 +59,19 @@ void M5CoreInk::shutdown()
     M5Ink.deepSleep();
     digitalWrite(POWER_HOLD_PIN, LOW);
 }
-int M5CoreInk::shutdown(int seconds)
+void M5CoreInk::shutdown(int seconds)
 {
     M5Ink.deepSleep();
     rtc.SetAlarmIRQ(seconds);
     digitalWrite(POWER_HOLD_PIN, LOW);
 }
-int M5CoreInk::shutdown(const RTC_TimeTypeDef &RTC_TimeStruct)
+void M5CoreInk::shutdown(const RTC_TimeTypeDef &RTC_TimeStruct)
 {
     M5Ink.deepSleep();
     rtc.SetAlarmIRQ(RTC_TimeStruct);
     digitalWrite(POWER_HOLD_PIN, LOW);
 }
-int M5CoreInk::shutdown(const RTC_DateTypeDef &RTC_DateStruct, const RTC_TimeTypeDef &RTC_TimeStruct)
+void M5CoreInk::shutdown(const RTC_DateTypeDef &RTC_DateStruct, const RTC_TimeTypeDef &RTC_TimeStruct)
 {
     M5Ink.deepSleep();
     rtc.SetAlarmIRQ(RTC_DateStruct,RTC_TimeStruct);

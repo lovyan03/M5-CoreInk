@@ -1,4 +1,5 @@
 #include "Ink_eSPI.h"
+#include "WFT0154CZB3_INIT.h"
 
 SPIClass ink_spi = SPIClass(VSPI);
 
@@ -57,28 +58,65 @@ void Ink_eSPI::begin()
     }
 }
 
+void Ink_eSPI::startWrite(void)
+{
+    if (!_transaction_count++)
+    {
+        ink_spi.beginTransaction(SPISettings(INK_SPI_FREQUENCY, MSBFIRST, SPI_MODE3));
+        CS_WRITE_L;
+    }
+}
+
+void Ink_eSPI::endWrite(void)
+{
+    if (!_transaction_count) return;
+    if (!--_transaction_count)
+    {
+        CS_WRITE_H;
+        ink_spi.endTransaction();
+    }
+}
+
 int Ink_eSPI::writeCMD(uint8_t cmd)
 {
-    ink_spi.beginTransaction(SPISettings(INK_SPI_FREQUENCY, MSBFIRST, SPI_MODE3));
-    CS_WRITE_L;
+    waitbusy(1000);
     DC_WRITE_L;
     INK_WRITE_8(cmd);
-    CS_WRITE_H;
-    ink_spi.endTransaction();
     return 0;
 }
 int Ink_eSPI::writeData(uint8_t data)
 {
-    ink_spi.beginTransaction(SPISettings(INK_SPI_FREQUENCY, MSBFIRST, SPI_MODE3));
-    CS_WRITE_L;
     DC_WRITE_H;
     INK_WRITE_8(data);
-    CS_WRITE_H;
-    ink_spi.endTransaction();
+    return 0;
+}
+int Ink_eSPI::writeData(uint8_t data, uint16_t len )
+{
+    DC_WRITE_H;
+    do {
+        INK_WRITE_8(data);
+    } while (--len);
+    return 0;
+}
+int Ink_eSPI::writeDataArray( const uint8_t* data , uint16_t len )
+{
+    DC_WRITE_H;
+    if (len & 3)
+    {
+        do {
+            INK_WRITE_8(*data++);
+        } while (--len & 3);
+        if (!len) { return 0; }
+    }
+    do {
+        INK_WRITE_32(*(uint32_t*)data);
+        data += 4;
+    } while (len -= 4);
+
     return 0;
 }
 
-bool Ink_eSPI::isBusy()
+bool Ink_eSPI::isBusy(void) const
 {
     return (digitalRead(INK_SPI_BUSY) == HIGH) ? false : true;
 }
@@ -96,16 +134,15 @@ int Ink_eSPI::writeInitList(const unsigned char *list)
 {
     int listLimit = list[0];
     unsigned char *startPtr = ((unsigned char *)list + 1);
+
+    startWrite();
     for (int i = 0; i < listLimit; i++)
     {
         writeCMD(*(startPtr + 0));
-
-        for (int dnum = 0; dnum < *(startPtr + 1); dnum++)
-        {
-            writeData(*(startPtr + 2 + dnum));
-        }
+        writeDataArray((startPtr + 2), *(startPtr + 1));
         startPtr += (*(startPtr + 1) + 2);
     }
+    endWrite();
     return 0;
 }
 
@@ -114,37 +151,20 @@ int Ink_eSPI::clear(int mode)
     if (!isInit())
         return -1;
 
+    startWrite();
     if( mode == 0 )
     {
         writeCMD(0x10);
-        for (int count = 0; count < _pixsize; count++)
-        {
-            writeData(0xff);
-        }
-        delay(2);
+        writeData(0xff, _pixsize);
         writeCMD(0x13);
-        for (int count = 0; count < _pixsize; count++)
-        {
-            writeData(0x00);
-        }
-        delay(2);
+        writeData(0x00, _pixsize);
         writeCMD(0x12);
-        waitbusy(1000);
 
         writeCMD(0x10);
-        for (int count = 0; count < _pixsize; count++)
-        {
-            writeData(0x00);
-        }
-        delay(2);
+        writeData(0x00, _pixsize);
         writeCMD(0x13);
-        for (int count = 0; count < _pixsize; count++)
-        {
-            writeData(0xff);
-        }
-        delay(2);
+        writeData(0xff, _pixsize);
         writeCMD(0x12);
-        waitbusy(1000);
     }
     else if( mode == 1 )
     {
@@ -153,17 +173,14 @@ int Ink_eSPI::clear(int mode)
         {
             writeData(_lastbuff[count]);
         }
-        delay(2);
         writeCMD(0x13);
         for (int count = 0; count < _pixsize; count++)
         {
             writeData(0xff);
         }
-        delay(2);
         writeCMD(0x12);
-        waitbusy(1000);
     }
-
+    endWrite();
     return 0;
 }
 
@@ -172,20 +189,15 @@ int Ink_eSPI::clearDSRAM()
     if (!isInit())
         return -1;
 
+    startWrite();
     for (int i = 0; i < 2; i++)
     {
         writeCMD(0x10);
-        for (int count = 0; count < _pixsize; count++)
-        {
-            writeData(0x00);
-        }
-        delay(2);
+        writeData(0x00, _pixsize);
         writeCMD(0x13);
-        for (int count = 0; count < _pixsize; count++)
-        {
-            writeData(0xff);
-        }
+        writeData(0xff, _pixsize);
     }
+    endWrite();
     return 0;
 }
 int Ink_eSPI::drawBuff(uint8_t *buff, bool bitMode)
@@ -197,42 +209,43 @@ int Ink_eSPI::drawBuff(uint8_t *buff, bool bitMode)
     {
         switchMode(INK_FULL_MODE);
     }
-    
+
+    startWrite();
     writeCMD(0x10);
-    for (int i = 0; i < _pixsize; i++)
+    writeDataArray(_lastbuff, _pixsize);
+
+    if (bitMode)
     {
-        writeData(_lastbuff[i]);
+        memcpy(_lastbuff, buff, _pixsize);
     }
-    delay(2);
+    else
+    {
+        for (int i = 0; i < _pixsize; i++)
+        {
+            _lastbuff[i] = ~buff[i];
+        }
+    }
+
     writeCMD(0x13);
-    for (int i = 0; i < _pixsize; i++)
-    {
-        writeData(( bitMode ) ? buff[i] : ~buff[i]);
-        _lastbuff[i] = ( bitMode ) ? buff[i] : ~buff[i];
-    }
-    delay(2);
+    writeDataArray(_lastbuff, _pixsize);
     writeCMD(0x12);
-    return waitbusy(1000);
+    endWrite();
+    return 0;
 }
 
 int Ink_eSPI::drawBuff(uint8_t* lastbuff,uint8_t* buff,size_t size)
 {
     if (!isInit()) return -1;
 
+    startWrite();
     writeCMD(0x10);
-    for (int i = 0; i < size; i++)
-    {
-        writeData(lastbuff[i]);
-    }
+    writeDataArray(lastbuff, size);
+    memcpy(lastbuff, buff, size);
     writeCMD(0x13);
-    for (int i = 0; i < size; i++)
-    {
-        writeData(buff[i]);
-        lastbuff[i] = buff[i];
-    }
+    writeDataArray(lastbuff, size);
     writeCMD(0x12);
-    delay(100);
-    return waitbusy(1000);
+    endWrite();
+    return 0;
 }
 
 bool Ink_eSPI::isInit()
@@ -242,6 +255,7 @@ bool Ink_eSPI::isInit()
 
 void Ink_eSPI::switchMode(int mode)
 {
+    startWrite();
     if (mode == INK_PARTIAL_MODE)
     {
         if( _mode == INK_FULL_MODE )
@@ -254,34 +268,20 @@ void Ink_eSPI::switchMode(int mode)
 
         int count = 0;
         writeCMD(0x20);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_vcomDC1[count]));
-        }
+        writeDataArray(lut_vcomDC1, 42);
 
         writeCMD(0x21);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_ww1[count]));
-        }
+        writeDataArray(lut_ww1, 42);
 
         writeCMD(0x22);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_bw1[count]));
-        }
+        writeDataArray(lut_bw1, 42);
 
         writeCMD(0x23);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_wb1[count]));
-        }
+        writeDataArray(lut_wb1, 42);
 
         writeCMD(0x24);
-        for (count = 0; count < 42; count++)
-        {
-            writeData(pgm_read_byte(&lut_bb1[count]));
-        }
+        writeDataArray(lut_bb1, 42);
+
         _mode = INK_PARTIAL_MODE;
         Serial.printf("Switch Mode to INK_PARTIAL_MODE \r\n");
     }
@@ -295,10 +295,12 @@ void Ink_eSPI::switchMode(int mode)
         _mode = INK_FULL_MODE;
         Serial.printf("Switch Mode to INK_FULL_MODE \r\n");
     }
+    endWrite();
 }
 
 void Ink_eSPI::setDrawAddr(uint16_t posx, uint16_t posy, uint16_t width, uint16_t height)
 {
+    startWrite();
     writeCMD(0x91);   //This command makes the display enter partial mode
     writeCMD(0x90);   //resolution setting
     writeData (posx);   //x-start     
@@ -309,6 +311,7 @@ void Ink_eSPI::setDrawAddr(uint16_t posx, uint16_t posy, uint16_t width, uint16_
     writeData (0);   //y Reserved   
     writeData (posy + height);   //y-end  
     writeData (0x01); 
+    endWrite();
 }
 
 uint8_t Ink_eSPI::getPix(uint16_t posX, uint16_t posY)
@@ -333,26 +336,32 @@ uint8_t Ink_eSPI::getPix(uint16_t posX, uint16_t posY)
 
 void Ink_eSPI::deepSleep()
 {
+    startWrite();
     writeCMD(0X50);
     writeData(0xf7);
     writeCMD(0X02); //power off
     waitbusy(5000);
     writeCMD(0X07); //deep sleep
     writeData(0xA5);
+    endWrite();
 }
 
 void Ink_eSPI::powerHVON()
 {
+    startWrite();
     writeCMD(0X50);
     writeData(0xd7);
     writeCMD(0X04);
+    endWrite();
     waitbusy(5000);
 }
 
 void Ink_eSPI::powerHVOFF()
 {
+    startWrite();
     writeCMD(0X50);
     writeData(0xf7);
     writeCMD(0X02);
+    endWrite();
     waitbusy(5000);
 }
