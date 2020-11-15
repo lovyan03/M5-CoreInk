@@ -169,15 +169,10 @@ int Ink_eSPI::clear(int mode)
     else if( mode == 1 )
     {
         writeCMD(0x10);
-        for (int count = 0; count < _pixsize; count++)
-        {
-            writeData(_lastbuff[count]);
-        }
+        writeDataArray(_lastbuff, _pixsize);
+
         writeCMD(0x13);
-        for (int count = 0; count < _pixsize; count++)
-        {
-            writeData(0xff);
-        }
+        writeData(0xff, _pixsize);
         writeCMD(0x12);
     }
     endWrite();
@@ -325,8 +320,8 @@ uint8_t Ink_eSPI::getPix(uint16_t posX, uint16_t posY)
     return 0;
     */
     int32_t pixNum = _width * posY + posX;
-    uint8_t data = _lastbuff[pixNum / 8];
-    uint8_t mark = (0x80 >> (pixNum % 8));
+    uint32_t data = _lastbuff[pixNum >> 3];
+    uint32_t mark = (0x80 >> (pixNum & 7));
     if ( data & mark)
     {
         return 1;
