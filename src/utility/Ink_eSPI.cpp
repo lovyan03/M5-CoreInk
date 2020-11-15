@@ -80,14 +80,18 @@ void Ink_eSPI::endWrite(void)
 int Ink_eSPI::writeCMD(uint8_t cmd)
 {
     waitbusy(1000);
+    startWrite();
     DC_WRITE_L;
     INK_WRITE_8(cmd);
+    endWrite();
     return 0;
 }
 int Ink_eSPI::writeData(uint8_t data)
 {
+    startWrite();
     DC_WRITE_H;
     INK_WRITE_8(data);
+    endWrite();
     return 0;
 }
 int Ink_eSPI::writeData(uint8_t data, uint16_t len )
@@ -250,7 +254,6 @@ bool Ink_eSPI::isInit()
 
 void Ink_eSPI::switchMode(int mode)
 {
-    startWrite();
     if (mode == INK_PARTIAL_MODE)
     {
         if( _mode == INK_FULL_MODE )
@@ -263,20 +266,34 @@ void Ink_eSPI::switchMode(int mode)
 
         int count = 0;
         writeCMD(0x20);
-        writeDataArray(lut_vcomDC1, 42);
+        for (count = 0; count < 42; count++)
+        {
+            writeData(pgm_read_byte(&lut_vcomDC1[count]));
+        }
 
         writeCMD(0x21);
-        writeDataArray(lut_ww1, 42);
+        for (count = 0; count < 42; count++)
+        {
+            writeData(pgm_read_byte(&lut_ww1[count]));
+        }
 
         writeCMD(0x22);
-        writeDataArray(lut_bw1, 42);
+        for (count = 0; count < 42; count++)
+        {
+            writeData(pgm_read_byte(&lut_bw1[count]));
+        }
 
         writeCMD(0x23);
-        writeDataArray(lut_wb1, 42);
+        for (count = 0; count < 42; count++)
+        {
+            writeData(pgm_read_byte(&lut_wb1[count]));
+        }
 
         writeCMD(0x24);
-        writeDataArray(lut_bb1, 42);
-
+        for (count = 0; count < 42; count++)
+        {
+            writeData(pgm_read_byte(&lut_bb1[count]));
+        }
         _mode = INK_PARTIAL_MODE;
         Serial.printf("Switch Mode to INK_PARTIAL_MODE \r\n");
     }
@@ -290,7 +307,6 @@ void Ink_eSPI::switchMode(int mode)
         _mode = INK_FULL_MODE;
         Serial.printf("Switch Mode to INK_FULL_MODE \r\n");
     }
-    endWrite();
 }
 
 void Ink_eSPI::setDrawAddr(uint16_t posx, uint16_t posy, uint16_t width, uint16_t height)
